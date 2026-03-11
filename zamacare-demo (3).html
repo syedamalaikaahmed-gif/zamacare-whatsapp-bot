@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZamaCare Hospital — WhatsApp Bot Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --teal: #00897B;
+    --teal-light: #4DB6AC;
+    --teal-dark: #00695C;
+    --gold: #FFB300;
+    --cream: #FAFAF7;
+    --dark: #0D1F1C;
+    --mid: #1E3A35;
+    --text: #2C4A45;
+    --muted: #6B8F8A;
+    --wa-green: #25D366;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--cream);
+    color: var(--text);
+    overflow-x: hidden;
+  }
+
+  /* HERO */
+  .hero {
+    background: var(--dark);
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+    padding: 60px;
+    gap: 60px;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    width: 700px; height: 700px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,137,123,0.25) 0%, transparent 70%);
+    top: -200px; right: -100px;
+    pointer-events: none;
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    width: 400px; height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,179,0,0.08) 0%, transparent 70%);
+    bottom: -100px; left: 100px;
+    pointer-events: none;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,137,123,0.2);
+    border: 1px solid rgba(0,137,123,0.4);
+    color: var(--teal-light);
+    padding: 6px 16px;
+    border-radius: 100px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    margin-bottom: 28px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .hero-badge .dot {
+    width: 7px; height: 7px;
+    background: var(--wa-green);
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+  }
+
+  .hero-left h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(40px, 5vw, 68px);
+    font-weight: 900;
+    color: #fff;
+    line-height: 1.1;
+    margin-bottom: 20px;
+    animation: fadeUp 0.7s ease 0.1s both;
+  }
+
+  .hero-left h1 span {
+    color: var(--teal-light);
+  }
+
+  .hero-left p {
+    color: rgba(255,255,255,0.6);
+    font-size: 17px;
+    line-height: 1.7;
+    max-width: 480px;
+    margin-bottom: 40px;
+    animation: fadeUp 0.7s ease 0.2s both;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    animation: fadeUp 0.7s ease 0.3s both;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--wa-green);
+    color: #fff;
+    padding: 16px 32px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 24px rgba(37,211,102,0.3);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(37,211,102,0.4);
+  }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 16px 32px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.25s ease;
+    cursor: pointer;
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255,255,255,0.13);
+    transform: translateY(-2px);
+  }
+
+  /* PHONE MOCKUP */
+  .hero-right {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: fadeUp 0.8s ease 0.2s both;
+  }
+
+  .phone-wrap {
+    position: relative;
+  }
+
+  .phone {
+    width: 300px;
+    background: #1A1A2E;
+    border-radius: 44px;
+    padding: 16px;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08);
+    position: relative;
+    z-index: 2;
+  }
+
+  .phone-screen {
+    background: #ECE5DD;
+    border-radius: 32px;
+    overflow: hidden;
+    min-height: 560px;
+  }
+
+  .wa-header {
+    background: var(--teal-dark);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .wa-avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--teal-light), var(--teal));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .wa-info h4 { color: #fff; font-size: 15px; font-weight: 600; }
+  .wa-info p { color: rgba(255,255,255,0.7); font-size: 12px; }
+
+  .wa-messages {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 460px;
+  }
+
+  .msg {
+    max-width: 82%;
+    padding: 10px 14px;
+    border-radius: 18px;
+    font-size: 13px;
+    line-height: 1.5;
+    animation: msgIn 0.4s ease both;
+  }
+
+  .msg-bot {
+    background: #fff;
+    border-bottom-left-radius: 4px;
+    align-self: flex-start;
+    color: #333;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+
+  .msg-user {
+    background: #DCF8C6;
+    border-bottom-right-radius: 4px;
+    align-self: flex-end;
+    color: #333;
+  }
+
+  .msg-time {
+    font-size: 10px;
+    color: #999;
+    text-align: right;
+    margin-top: 3px;
+  }
+
+  .msg-btn {
+    background: rgba(0,137,123,0.12);
+    border: 1px solid rgba(0,137,123,0.3);
+    color: var(--teal-dark);
+    padding: 8px 14px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 6px;
+    display: inline-block;
+  }
+
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg-1 { animation-delay: 0.5s; }
+  .msg-2 { animation-delay: 1.2s; }
+  .msg-3 { animation-delay: 2.0s; }
+  .msg-4 { animation-delay: 2.8s; }
+  .msg-5 { animation-delay: 3.6s; }
+
+  /* GLOW */
+  .phone-glow {
+    position: absolute;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(0,137,123,0.4) 0%, transparent 70%);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    filter: blur(40px);
+    z-index: 1;
+    animation: glowPulse 3s ease-in-out infinite;
+  }
+
+  @keyframes glowPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  /* STATS STRIP */
+  .stats {
+    background: var(--mid);
+    padding: 28px 60px;
+    display: flex;
+    justify-content: center;
+    gap: 80px;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    text-align: center;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .stat-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--teal-light);
+    line-height: 1;
+  }
+
+  .stat-label {
+    color: rgba(255,255,255,0.5);
+    font-size: 13px;
+    margin-top: 4px;
+  }
+
+  /* FEATURES */
+  .section {
+    padding: 100px 60px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .section-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin-bottom: 14px;
+  }
+
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(30px, 4vw, 48px);
+    font-weight: 700;
+    color: var(--dark);
+    line-height: 1.2;
+    margin-bottom: 16px;
+  }
+
+  .section-sub {
+    color: var(--muted);
+    font-size: 16px;
+    max-width: 560px;
+    line-height: 1.7;
+    margin-bottom: 60px;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+  }
+
+  .dept-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(77,182,172,0.2);
+    border-radius: 20px;
+    padding: 28px 20px;
+    text-align: center;
+    transition: all 0.3s ease;
+  }
+
+  .dept-card:hover {
+    background: rgba(0,137,123,0.15);
+    border-color: var(--teal-light);
+    transform: translateY(-6px);
+    box-shadow: 0 16px 40px rgba(0,137,123,0.2);
+  }
+
+  .dept-icon { font-size: 40px; margin-bottom: 14px; }
+  .dept-name { color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 8px; font-family: 'Playfair Display', serif; }
+  .dept-desc { color: rgba(255,255,255,0.45); font-size: 12px; line-height: 1.5; }
+
+  .feature-card {
+    background: #fff;
+    border: 1px solid rgba(0,137,123,0.1);
+    border-radius: 20px;
+    padding: 32px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--teal), var(--teal-light));
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .feature-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 20px 40px rgba(0,137,123,0.1);
+    border-color: rgba(0,137,123,0.3);
+  }
+
+  .feature-card:hover::before { opacity: 1; }
+
+  .feature-icon {
+    width: 52px; height: 52px;
+    background: linear-gradient(135deg, rgba(0,137,123,0.12), rgba(77,182,172,0.08));
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    margin-bottom: 20px;
+  }
+
+  .feature-card h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--dark);
+    margin-bottom: 10px;
+  }
+
+  .feature-card p {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  /* HOW IT WORKS */
+  .how-section {
+    background: var(--dark);
+    padding: 100px 60px;
+  }
+
+  .how-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .how-section .section-title { color: #fff; }
+  .how-section .section-sub { color: rgba(255,255,255,0.5); }
+
+  .steps-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    position: relative;
+    margin-top: 60px;
+  }
+
+  .steps-row::before {
+    content: '';
+    position: absolute;
+    top: 28px; left: 10%; right: 10%;
+    height: 2px;
+    background: linear-gradient(90deg, var(--teal), var(--teal-light), var(--gold));
+    z-index: 0;
+  }
+
+  .step {
+    text-align: center;
+    position: relative;
+    z-index: 1;
+    padding: 0 12px;
+  }
+
+  .step-circle {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--teal), var(--teal-dark));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin: 0 auto 20px;
+    box-shadow: 0 4px 20px rgba(0,137,123,0.4);
+  }
+
+  .step h4 {
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .step p {
+    color: rgba(255,255,255,0.45);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  /* CTA */
+  .cta-section {
+    background: linear-gradient(135deg, var(--teal-dark), var(--teal));
+    padding: 80px 60px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cta-section::before {
+    content: '';
+    position: absolute;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.05);
+    top: -300px; right: -100px;
+  }
+
+  .cta-section h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(28px, 4vw, 48px);
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 16px;
+    position: relative;
+  }
+
+  .cta-section p {
+    color: rgba(255,255,255,0.75);
+    font-size: 17px;
+    margin-bottom: 40px;
+    position: relative;
+  }
+
+  .cta-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff;
+    color: var(--teal-dark);
+    padding: 18px 40px;
+    border-radius: 14px;
+    font-size: 17px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.25s ease;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    position: relative;
+  }
+
+  .cta-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.3);
+  }
+
+  /* INFO BOX */
+  .info-box {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 16px;
+    padding: 20px 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 32px;
+    position: relative;
+  }
+
+  .info-box span { color: rgba(255,255,255,0.9); font-size: 14px; }
+  .info-box strong { color: #fff; font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+
+  /* FOOTER */
+  footer {
+    background: var(--dark);
+    padding: 30px 60px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  footer p { color: rgba(255,255,255,0.4); font-size: 13px; }
+  footer .footer-brand {
+    font-family: 'Playfair Display', serif;
+    color: var(--teal-light);
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; padding: 40px 24px; text-align: center; }
+    .hero::before, .hero::after { display: none; }
+    .hero-left p { margin: 0 auto 32px; }
+    .hero-actions { justify-content: center; }
+    .hero-right { display: none; }
+    .stats { padding: 28px 24px; gap: 40px; }
+    .section { padding: 60px 24px; }
+    .features-grid { grid-template-columns: 1fr 1fr; }
+    .dept-grid { grid-template-columns: 1fr 1fr !important; }
+    .steps-row { grid-template-columns: 1fr 1fr; gap: 24px; }
+    .steps-row::before { display: none; }
+    .how-section { padding: 60px 24px; }
+    .cta-section { padding: 60px 24px; }
+    footer { padding: 24px; flex-direction: column; text-align: center; }
+  }
+
+  /* COPY BUTTON */
+  .copy-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 14px 20px;
+    margin-top: 24px;
+  }
+
+  .copy-wrap span {
+    color: rgba(255,255,255,0.8);
+    font-size: 15px;
+    font-family: monospace;
+    flex: 1;
+  }
+
+  .copy-btn {
+    background: var(--teal);
+    color: #fff;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .copy-btn:hover { background: var(--teal-light); }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-left">
+    <div class="hero-badge">
+      <span class="dot"></span>
+      Live & Running — Production Ready
+    </div>
+    <h1>ZamaCare Hospital<br><span>WhatsApp Bot</span></h1>
+    <p>24/7 intelligent appointment booking, doctor selection, payment handling — all inside WhatsApp. No app download needed.</p>
+    <div class="hero-actions">
+      <a href="https://wa.me/923154396976?text=Hello" target="_blank" class="btn-primary">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Test on WhatsApp
+      </a>
+      <button class="btn-secondary" onclick="document.getElementById('how').scrollIntoView({behavior:'smooth'})">
+        See How It Works ↓
+      </button>
+    </div>
+  </div>
+
+  <div class="hero-right">
+    <div class="phone-wrap">
+      <div class="phone-glow"></div>
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="wa-header">
+            <div class="wa-avatar">Z</div>
+            <div class="wa-info">
+              <h4>ZamaCare Hospital</h4>
+              <p>🟢 Online</p>
+            </div>
+          </div>
+          <div class="wa-messages">
+            <div class="msg msg-bot msg-1">
+              👋 Assalam o Alaikum! Welcome to <strong>ZamaCare Hospital</strong>. How can I help you today?
+              <div>
+                <span class="msg-btn">📅 Book Appointment</span>
+              </div>
+              <div>
+                <span class="msg-btn">📋 My Appointments</span>
+              </div>
+              <div class="msg-time">09:00 AM ✓✓</div>
+            </div>
+            <div class="msg msg-user msg-2">
+              Book Appointment
+              <div class="msg-time">09:01 AM ✓✓</div>
+            </div>
+            <div class="msg msg-bot msg-3">
+              Great! Please select a department:
+              <div>
+                <span class="msg-btn">🫀 Cardiology</span>
+              </div>
+              <div>
+                <span class="msg-btn">🧠 Neurology</span>
+              </div>
+              <div>
+                <span class="msg-btn">🦴 Orthopedics</span>
+              </div>
+              <div class="msg-time">09:01 AM ✓✓</div>
+            </div>
+            <div class="msg msg-user msg-4">
+              Cardiology
+              <div class="msg-time">09:02 AM ✓✓</div>
+            </div>
+            <div class="msg msg-bot msg-5">
+              ✅ <strong>Appointment Confirmed!</strong><br>
+              Dr. Ahmed — Cardiology<br>
+              📅 Tomorrow, 10:00 AM
+              <div class="msg-time">09:02 AM ✓✓</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat">
+    <div class="stat-num">51</div>
+    <div class="stat-label">Automation Nodes</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">24/7</div>
+    <div class="stat-label">Always Available</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">&lt; 2s</div>
+    <div class="stat-label">Response Time</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">100%</div>
+    <div class="stat-label">WhatsApp Native</div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section class="section">
+  <div class="section-label">What It Does</div>
+  <h2 class="section-title">Everything patients need,<br>right in WhatsApp</h2>
+  <p class="section-sub">No app download, no website login — patients simply message and get instant help in their language.</p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">📅</div>
+      <h3>Appointment Booking</h3>
+      <p>Patients select department → doctor → date → time slot in a guided WhatsApp flow. Fully automated.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🏥</div>
+      <h3>Department & Doctor Selection</h3>
+      <p>Live data from database — shows available doctors, their schedules and real-time slot availability.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🚫</div>
+      <h3>No Double Booking</h3>
+      <p>Bot checks existing bookings before confirming — same doctor, same date, same time slot can never be double-booked. Patients get instant alternate suggestions.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">💳</div>
+      <h3>Payment Handling</h3>
+      <p>Supports Cash and Meezan Bank payments. Transaction ID collection and confirmation — all automated.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📋</div>
+      <h3>My Appointments</h3>
+      <p>Patients can view all their booked appointments anytime by typing or selecting from the menu.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📍</div>
+      <h3>Location & Timings</h3>
+      <p>Hospital location with Google Maps link, and OPD timings — sent instantly on request.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔄</div>
+      <h3>Smart Session Memory</h3>
+      <p>Bot remembers where the patient left off. Sessions stored in Supabase, auto-cleanup after 2 hours.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🤖</div>
+      <h3>Fully Automated</h3>
+      <p>No human agent needed. n8n handles all logic — 51 nodes working together 24/7 without any manual intervention.</p>
+    </div>
+  </div>
+</section>
+
+<!-- DEPARTMENTS -->
+<section style="background: var(--dark); padding: 80px 0;">
+  <div class="section" style="padding-top:0; padding-bottom:0;">
+    <div class="section-label" style="color:var(--teal-light)">Available Departments</div>
+    <h2 class="section-title" style="color:#fff;">5 Specialized Departments,<br>all bookable via WhatsApp</h2>
+    <p class="section-sub" style="color:rgba(255,255,255,0.5);">Patients select their department directly in chat — real-time availability shown for each.</p>
+
+    <div class="dept-grid" style="display:grid; grid-template-columns: repeat(5,1fr); gap:16px; margin-top:48px;">
+
+      <div class="dept-card">
+        <div class="dept-icon">👁️</div>
+        <div class="dept-name">Eye Specialist</div>
+        <div class="dept-desc">Ophthalmology & Vision Care</div>
+      </div>
+
+      <div class="dept-card">
+        <div class="dept-icon">🧠</div>
+        <div class="dept-name">Neuro</div>
+        <div class="dept-desc">Neurology & Brain Specialist</div>
+      </div>
+
+      <div class="dept-card">
+        <div class="dept-icon">🦴</div>
+        <div class="dept-name">Orthopedic</div>
+        <div class="dept-desc">Bone & Joint Specialist</div>
+      </div>
+
+      <div class="dept-card">
+        <div class="dept-icon">🫀</div>
+        <div class="dept-name">Cardiologist</div>
+        <div class="dept-desc">Heart Specialist</div>
+      </div>
+
+      <div class="dept-card">
+        <div class="dept-icon">🔬</div>
+        <div class="dept-name">Surgery</div>
+        <div class="dept-desc">General & Specialized Surgery</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section" id="how">
+  <div class="how-inner">
+    <div class="section-label" style="color:var(--teal-light)">How It Works</div>
+    <h2 class="section-title">From message to confirmed booking<br>in under 2 minutes</h2>
+    <p class="section-sub">The entire flow is automated — no human agent needed for routine bookings.</p>
+
+    <div class="steps-row">
+      <div class="step">
+        <div class="step-circle">💬</div>
+        <h4>Patient Messages</h4>
+        <p>Patient sends any message to the hospital WhatsApp number</p>
+      </div>
+      <div class="step">
+        <div class="step-circle">🤖</div>
+        <h4>Bot Responds</h4>
+        <p>Instant main menu appears with all options</p>
+      </div>
+      <div class="step">
+        <div class="step-circle">🏥</div>
+        <h4>Selects Service</h4>
+        <p>Patient picks department, doctor and preferred slot</p>
+      </div>
+      <div class="step">
+        <div class="step-circle">💳</div>
+        <h4>Pays & Confirms</h4>
+        <p>Cash or Meezan Bank, transaction confirmed automatically</p>
+      </div>
+      <div class="step">
+        <div class="step-circle">✅</div>
+        <h4>Booked!</h4>
+        <p>Confirmation message sent, record saved in database</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <h2>Ready to test it yourself?</h2>
+  <p>Send a WhatsApp message to try the live bot right now</p>
+
+  <a href="https://wa.me/923154396976?text=Hello" target="_blank" class="cta-btn">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+    Open WhatsApp & Test Bot
+  </a>
+
+  <div style="margin-top:40px; display:flex; flex-direction:column; align-items:center; gap:16px;">
+    <p style="font-size:14px; color:rgba(255,255,255,0.6);">Or share this WhatsApp link directly:</p>
+    <div class="copy-wrap">
+      <span id="waLink">https://wa.me/923154396976?text=Hello</span>
+      <button class="copy-btn" onclick="copyLink()">Copy</button>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-brand">ZamaCare Hospital</div>
+  <p>Powered by n8n + Supabase + WhatsApp Cloud API</p>
+  <p style="color:rgba(255,255,255,0.3); font-size:12px;">Built with ❤️ for better patient experience</p>
+</footer>
+
+<script>
+  function copyLink() {
+    const link = document.getElementById('waLink').textContent;
+    navigator.clipboard.writeText(link).then(() => {
+      const btn = document.querySelector('.copy-btn');
+      btn.textContent = 'Copied!';
+      btn.style.background = '#25D366';
+      setTimeout(() => { btn.textContent = 'Copy'; btn.style.background = ''; }, 2000);
+    });
+  }
+
+  // Scroll animations
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.feature-card, .step, .stat').forEach(el => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(30px)';
+    el.style.transition = 'all 0.6s ease';
+    observer.observe(el);
+  });
+</script>
+</body>
+</html>
