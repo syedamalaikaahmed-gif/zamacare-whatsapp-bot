@@ -12,7 +12,7 @@ for modern hospitals and clinics.
 🖥️ Hospital Admin Dashboard
 [Open Admin Dashboard](https://hospital-admin-dashb-7olk.bolt.host/)
 Email: syedamalaikaahmed@gmail.com
-Password: Zamacare2026
+Password: Zamacare2024
 
 📌 Project Overview
 
