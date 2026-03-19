@@ -1,0 +1,2811 @@
+{
+  "name": "ZamaCare Hospital - WhatsApp Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zamacare-whatsapp",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -4432,
+        352
+      ],
+      "id": "23100192-f9a5-40f4-9878-3b15a7a9e6d7",
+      "name": "Whatsapp Webhook",
+      "webhookId": "e0c88f04-085e-4fdd-86f9-9940720e674b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst query = $input.first().json.query;\n\nif (query?.['hub.mode'] === 'subscribe') {\n  return [{ json: { isVerification: true, challenge: query['hub.challenge'] } }];\n}\n\nconst entry = body?.entry?.[0];\nconst changes = entry?.changes?.[0];\nconst value = changes?.value;\n\nif (!value?.messages && value?.statuses) {\n  return [{ json: { skip: true, reason: 'status_update' } }];\n}\n\nconst message = value?.messages?.[0];\nconst contact = value?.contacts?.[0];\n\nif (!message) {\n  return [{ json: { skip: true, reason: 'no_message' } }];\n}\n\nlet buttonId = '';\nlet listId = '';\nlet userInput = '';\n\nif (message.type === 'interactive') {\n  if (message.interactive?.type === 'button_reply') {\n    buttonId = message.interactive.button_reply.id || '';\n    userInput = buttonId;\n  } else if (message.interactive?.type === 'list_reply') {\n    listId = message.interactive.list_reply.id || '';\n    userInput = listId;\n  }\n} else if (message.type === 'text') {\n  userInput = message.text?.body?.trim() || '';\n} else if (message.type === 'image' || message.type === 'document') {\n  userInput = 'media_received';\n  buttonId = 'media_received';\n}\n\nreturn [{\n  json: {\n    skip: false,\n    phone: message.from,\n    name: contact?.profile?.name || 'Patient',\n    messageId: message.id,\n    messageType: message.type,\n    userInput,\n    rawText: message.text?.body || '',\n    buttonId,\n    listId,\n    timestamp: message.timestamp,\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4208,
+        352
+      ],
+      "id": "60cda821-ee3a-456d-991e-17b9249eab94",
+      "name": "Extract Message"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "102c39a4-820e-471c-857e-4fdad0e0d27d",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -3984,
+        352
+      ],
+      "id": "0da9ea7d-b5ee-45a2-83a8-355a22d681d5",
+      "name": "Skip Check"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "sessions",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $json.phone }}"
+            },
+            {
+              "keyName": "is_active",
+              "condition": "eq",
+              "keyValue": "=true"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -3760,
+        352
+      ],
+      "id": "79972616-c09b-4f91-93d5-38f12a6cb58e",
+      "name": "Get Session",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const skipCheck = $('Skip Check').first().json;\nconst sessionArr = $input.all().map(r => r.json);\nconst validSessions = sessionArr.filter(s => s.patient_phone);\nvalidSessions.sort((a, b) => new Date(b.last_activity) - new Date(a.last_activity));\nconst session = validSessions.length > 0 ? validSessions[0] : null;\nconst userInput = skipCheck.userInput || '';\n\nlet currentStep = 'main_menu';\nif (userInput === 'book_appointment') currentStep = 'book_appointment';\nelse if (userInput.startsWith('dept_')) currentStep = 'select_department';\nelse if (userInput.startsWith('doc_')) currentStep = 'select_doctor';\nelse if (userInput.startsWith('date_')) currentStep = 'select_date';\nelse if (userInput.startsWith('time_')) currentStep = 'select_time';\nelse if (userInput === 'confirm_booking') currentStep = 'confirm_booking';\nelse if (userInput === 'cancel_booking') currentStep = 'main_menu';\nelse if (userInput === 'my_appointments') currentStep = 'my_appointments';\nelse if (userInput.startsWith('cancel_')) currentStep = 'cancel_appointment';\nelse if (userInput === 'hospital_location') currentStep = 'hospital_location';\nelse if (userInput === 'hospital_timings') currentStep = 'hospital_timings';\nelse if (userInput === 'payment_methods') currentStep = 'payment_methods';\nelse if (userInput === 'payment_cash') currentStep = 'payment_cash';\nelse if (userInput === 'payment_meezan') currentStep = 'payment_meezan';\nelse if (userInput.length > 4 && session?.current_step === 'payment_meezan') currentStep = 'save_payment_meezan';\n\nlet parsedContext = {};\ntry {\n  const ctx = session?.context;\n  parsedContext = typeof ctx === 'string' ? JSON.parse(ctx) : (ctx || {});\n} catch(e) { parsedContext = {}; }\n\nif (userInput.startsWith('doc_')) {\n  parsedContext.doctor_id = userInput;\n  parsedContext.appointment_date = '';\n}\nif (userInput.startsWith('date_')) {\n  parsedContext.appointment_date = userInput.replace('date_', '');\n}\n\nreturn [{ json: {\n  phone: skipCheck.phone,\n  patient_phone: skipCheck.phone,\n  name: skipCheck.name,\n  userInput: userInput,\n  buttonId: skipCheck.buttonId,\n  listId: skipCheck.listId,\n  rawText: skipCheck.rawText,\n  messageType: skipCheck.messageType,\n  current_step: currentStep,\n  context: parsedContext,\n  sessionId: session?.session_id || null,\n  hasSession: !!session\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3536,
+        352
+      ],
+      "id": "75f54d21-8d68-4a29-b5c8-72b799ff5608",
+      "name": "Merge State"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "403b62d4-9a1a-43e8-bad2-0f4a8dc7f956",
+              "leftValue": "={{ $json.hasSession }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -3312,
+        352
+      ],
+      "id": "e17efa60-c82e-4039-aa0e-f5dd23017315",
+      "name": "Session Exists?"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "sessions",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $json.phone }}"
+            },
+            {
+              "keyName": "session_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.sessionId }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "is_active",
+              "fieldValue": "=true"
+            },
+            {
+              "fieldId": "last_activity",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "current_step",
+              "fieldValue": "={{ $('Merge State').first().json.current_step }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -3088,
+        256
+      ],
+      "id": "8f76802b-fcc8-406c-afdb-fa952753993c",
+      "name": "Update a row",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "sessions",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "patient_phone",
+              "fieldValue": "={{ $('Merge State').first().json.patient_phone }}"
+            },
+            {
+              "fieldId": "channel",
+              "fieldValue": "whatsapp"
+            },
+            {
+              "fieldId": "conversation_type",
+              "fieldValue": "appointment"
+            },
+            {
+              "fieldId": "current_step",
+              "fieldValue": "main_menu"
+            },
+            {
+              "fieldId": "context",
+              "fieldValue": "={}"
+            },
+            {
+              "fieldId": "is_active",
+              "fieldValue": "=true"
+            },
+            {
+              "fieldId": "last_activity",
+              "fieldValue": "= {{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "session_id",
+              "fieldValue": "={{ $('Merge State').first().json.patient_phone + '_' + Date.now() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -3088,
+        448
+      ],
+      "id": "e3235430-e2d2-4f2b-ac27-4f673c9fea5c",
+      "name": "Create a row",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -2864,
+        352
+      ],
+      "id": "62c48ed4-9c96-4d6f-bcb3-67f1cdc757c8",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "main_menu",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "0660cb55-6a1c-4aa5-8df4-81003994b443"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "main_menu"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "aabb1001",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "book_appointment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "book_appointment"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ff6396e7-550f-4dbd-9a0f-4583c5549dd9",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "select_department",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "select_department"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c9bf934c-f8f6-4ccf-be19-54c6f1ea47dc",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "select_doctor",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "select_doctor"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "aabb1004",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "select_date",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "select_date"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "aabb1005",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "select_time",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "select_time"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "aabb1006",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "confirm_booking",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "confirm_booking"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "aabb1007",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "my_appointments",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "my_appointments"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "aabb1008",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "hospital_location",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "hospital_location"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f49ee77d-b64f-4c9a-9a81-b0143ac3afce",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "payment_cash",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "payment_cash"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7c94bf86-00e6-4b42-8262-b05b680f3cad",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "payment_meezan",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "payment_meezan"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "70dd7585-aa34-4607-9f1d-2dbf5e471e33",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "save_payment_meezan",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "save_payment_meezan"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a8a26b0f-19ba-4369-bce1-e05d13b4f7f8",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "hospital_timings",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "hospital_timings"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b96cf82b-7244-4e82-b654-fec5be313eaf",
+                    "leftValue": "={{ $json.current_step }}",
+                    "rightValue": "cancel_appointment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "cancel_appointment"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -2640,
+        160
+      ],
+      "id": "07162acc-7806-4d6e-a7d4-25351127d17b",
+      "name": "Route by Step"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Merge State').first().json.patient_phone }}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"list\",\n    \"header\": {\n      \"type\": \"text\",\n      \"text\": \"🏥 ZamaCare Hospital\"\n    },\n    \"body\": {\n      \"text\": \"Welcome, *{{ $('Merge State').first().json.name }}!* 👋\\n\\n━━━━━━━━━━━━━━━\\nYour trusted healthcare partner in Khairpur.\\n📍 Main Street, Khairpur\\n📞 *+92315-4396976*\\n⏰ *Open 24/7*\\n━━━━━━━━━━━━━━━\\n\\nHow can we assist you today?\"\n    },\n    \"footer\": {\n      \"text\": \"ZamaCare — Caring for You Always 💙\"\n    },\n    \"action\": {\n      \"button\": \"View Menu\",\n      \"sections\": [\n        {\n          \"title\": \"🗓️ Appointment Services\",\n          \"rows\": [\n            {\n              \"id\": \"book_appointment\",\n              \"title\": \"📅 Book Appointment\",\n              \"description\": \"Schedule a doctor visit\"\n            },\n            {\n              \"id\": \"my_appointments\",\n              \"title\": \"🔍 My Appointments\",\n              \"description\": \"Check your booking status\"\n            },\n            {\n              \"id\": \"cancel_appointment\",\n              \"title\": \"❌ Cancel Appointment\",\n              \"description\": \"Cancel your booking\"\n            }\n          ]\n        },\n        {\n          \"title\": \"ℹ️ Hospital Info\",\n          \"rows\": [\n            {\n              \"id\": \"hospital_location\",\n              \"title\": \"📍 Location & Directions\",\n              \"description\": \"Main Street, Khairpur\"\n            },\n            {\n              \"id\": \"hospital_timings\",\n              \"title\": \"⏰ Hospital Timings\",\n              \"description\": \"View our schedule\"\n            }\n          ]\n        }\n      ]\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2416,
+        -896
+      ],
+      "id": "05b9a79f-a527-4be7-bd53-dcc03031f538",
+      "name": "Send Main Menu",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "departments",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -2416,
+        832
+      ],
+      "id": "24bb140b-5156-445a-9c61-25946b00bfbd",
+      "name": "Get Departments",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Merge State').first().json.patient_phone }}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"list\",\n    \"header\": { \"type\": \"text\", \"text\": \"🏥 Select Department\" },\n    \"body\": { \"text\": \"Please select the department for your appointment:\" },\n    \"footer\": { \"text\": \"ZamaCare Hospital, Khairpur\" },\n    \"action\": {\n      \"button\": \"Choose Department\",\n      \"sections\": [{\n        \"title\": \"Departments\",\n        \"rows\": {{ JSON.stringify($json.rows) }}\n      }]\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1968,
+        832
+      ],
+      "id": "4998c720-56fa-43ec-b811-8df6486be4f4",
+      "name": "Send Dept List",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "sessions",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Merge State').first().json.patient_phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "current_step",
+              "fieldValue": "select_department"
+            },
+            {
+              "fieldId": "last_activity",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "context",
+              "fieldValue": "={{ JSON.stringify({}) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1744,
+        832
+      ],
+      "id": "112bba67-c1cd-4083-a646-73b8570bd917",
+      "name": "Update Session - Dept",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const state = $input.first().json;\nconst mergeState = $('Merge State').first().json;\nconst userInput = mergeState.userInput || mergeState.listId || '';\nconst slug = userInput.replace('dept_', '');\n\nreturn [{\n  json: {\n    patient_phone: state.patient_phone || mergeState.patient_phone,\n    name: state.name || mergeState.name,\n    deptSlug: slug,\n    context: state.context,\n    userInput: userInput\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2416,
+        640
+      ],
+      "id": "58e310e7-b8b3-4612-af5a-83db9c9b7026",
+      "name": "Extract Dept"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "departments",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "slug",
+              "condition": "eq",
+              "keyValue": "={{ $json.deptSlug }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -2192,
+        640
+      ],
+      "id": "fad9e60c-5410-4d44-b4c1-5216f093975e",
+      "name": "Get Dept ID",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "doctors",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "department_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1968,
+        640
+      ],
+      "id": "abbdda42-e47c-4ed9-8368-cd2f943e9d86",
+      "name": "Get Doctors",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const doctors = $input.all();\nconst state = $('Merge State').first().json;\nconst dept = $('Get Dept ID').first().json;\n\nconst rows = doctors.map(d => ({\n  id: String('doc_' + d.json.id).substring(0, 200),\n  title: String('👨‍⚕️ ' + d.json.name).substring(0, 24),\n  description: String((d.json.qualification || '') + ' | Rs.' + (d.json.consultation_fee || '')).substring(0, 72)\n}));\n\nreturn [{\n  json: {\n    patient_phone: state.patient_phone,\n    name: state.name,\n    deptId: dept.id,\n    deptName: dept.name,\n    rows: rows\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1744,
+        640
+      ],
+      "id": "9096fa66-bb07-4362-887b-32d98f7ab889",
+      "name": "Build Doctor List"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Merge State').first().json.patient_phone }}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"list\",\n    \"header\": {\n      \"type\": \"text\",\n      \"text\": \"👨‍⚕️ Select Doctor\"\n    },\n    \"body\": {\n      \"text\": \"Please select your preferred doctor from *{{ $json.deptName }}* department:\"\n    },\n    \"footer\": {\n      \"text\": \"ZamaCare Hospital\"\n    },\n    \"action\": {\n      \"button\": \"Choose Doctor\",\n      \"sections\": [\n        {\n          \"title\": \"Available Doctors\",\n          \"rows\": {{ JSON.stringify($json.rows) }}\n        }\n      ]\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1520,
+        640
+      ],
+      "id": "719ce90f-8178-42c9-946b-98e92237ae7e",
+      "name": "Send Doctor List",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "sessions",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Merge State').first().json.patient_phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "current_step",
+              "fieldValue": "select_doctor"
+            },
+            {
+              "fieldId": "last_activity",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "context",
+              "fieldValue": "={{ JSON.stringify({ dept_id: $('Get Dept ID').first().json.id, dept_name: $('Get Dept ID').first().json.name, dept_slug: $('Extract Dept').first().json.deptSlug, consultation_fee: $('Get Doctors').first().json.consultation_fee }) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        640
+      ],
+      "id": "adb51005-12ed-4205-87d1-c023ad2c6177",
+      "name": "Update Session - Doctor",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const mergeState = $('Merge State').first().json;\nconst userInput = mergeState.userInput || '';\nconst docId = userInput.replace('doc_', '');\nconst context = mergeState.context || {};\n\nconst availabilityData = $input.all().map(r => r.json);\nconst availableDays = availabilityData.map(a => a.day_of_week);\n\nconst dates = [];\nconst today = new Date();\nfor (let i = 1; i <= 30 && dates.length < 7; i++) {\n  const d = new Date(today);\n  d.setDate(today.getDate() + i);\n  const day = d.getDay();\n  \n  if (availableDays.includes(day)) {\n    const label = d.toLocaleDateString('en-US', { \n      weekday: 'short', month: 'short', day: 'numeric' \n    });\n    const val = d.toISOString().split('T')[0];\n    dates.push({ \n      id: 'date_' + val, \n      title: label, \n      description: 'Available' \n    });\n  }\n}\n\nreturn [{ json: {\n  patient_phone: mergeState.patient_phone,\n  name: mergeState.name,\n  doctorId: docId,\n  context: {\n    dept_id: context.dept_id,\n    dept_name: context.dept_name,\n    dept_slug: context.dept_slug,\n    doctor_id: docId\n  },\n  rows: dates\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2192,
+        -704
+      ],
+      "id": "491eac44-31c2-412c-9199-50723f194a59",
+      "name": "Extract Doctor & Build Dates"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Merge State').first().json.patient_phone }}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"list\",\n    \"header\": {\n      \"type\": \"text\",\n      \"text\": \"📅 Select Date\"\n    },\n    \"body\": {\n      \"text\": \"Please select your preferred appointment date:\"\n    },\n    \"footer\": {\n      \"text\": \"ZamaCare Hospital\"\n    },\n    \"action\": {\n      \"button\": \"Choose Date\",\n      \"sections\": [\n        {\n          \"title\": \"Available Dates\",\n          \"rows\": {{ JSON.stringify($json.rows) }}\n        }\n      ]\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1968,
+        -704
+      ],
+      "id": "5a9dc1b9-6f65-4421-af8f-3c1d688323a9",
+      "name": "Send Date List",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const mergeState = $('Merge State').first().json;\nconst userInput = mergeState.userInput || '';\nconst context = typeof mergeState.context === 'string'\n  ? JSON.parse(mergeState.context)\n  : mergeState.context || {};\n\nconst selectedDate = userInput.startsWith('date_')\n  ? userInput.replace('date_', '')\n  : (context.appointment_date || '');\n\n// Get booked slots\nconst bookedData = $('Get Booked Slots').all().map(r => r.json);\nconst bookedTimes = bookedData.map(b => b.appointment_time?.substring(0, 5));\n\nconst slotDuration = 20;\nconst bufferMinutes = 5;\nconst totalInterval = slotDuration + bufferMinutes;\n\nconst slots = [];\nconst startHour = 9;\nconst endHour = 17;\n\nfor (let h = startHour; h < endHour; h++) {\n  for (let m = 0; m < 60; m += totalInterval) {\n    if (h * 60 + m + slotDuration > endHour * 60) break;\n    const timeStr = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');\n    if (!bookedTimes.includes(timeStr)) {\n      const ampm = h >= 12 ? 'PM' : 'AM';\n      const displayHour = h > 12 ? h - 12 : h === 0 ? 12 : h;\n      const displayMin = String(m).padStart(2, '0');\n      slots.push({\n        id: 'time_' + timeStr,\n        title: `🕐 ${displayHour}:${displayMin} ${ampm}`,\n        description: '20 min slot'\n      });\n    }\n  }\n}\n\n// Max 10 slots (WhatsApp limit)\nconst finalSlots = slots.slice(0, 10);\n\nreturn [{\n  json: {\n    patient_phone: mergeState.patient_phone,\n    name: mergeState.name,\n    selectedDate,\n    context,\n    rows: finalSlots.length > 0\n      ? finalSlots\n      : [{ id: 'no_slots', title: '❌ No slots available', description: 'Please choose another date' }]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1744,
+        -512
+      ],
+      "id": "b0ffd648-a05f-497b-921d-fa3419666bca",
+      "name": "Build Time Slots"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Merge State').first().json.patient_phone }}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"list\",\n    \"header\": {\n      \"type\": \"text\",\n      \"text\": \"🕐 Select Time Slot\"\n    },\n    \"body\": {\n      \"text\": \"Selected date: *{{ $json.selectedDate }}*\\n\\nPlease choose your preferred time:\"\n    },\n    \"footer\": {\n      \"text\": \"ZamaCare Hospital\"\n    },\n    \"action\": {\n      \"button\": \"Choose Time\",\n      \"sections\": [\n        {\n          \"title\": \"Available Times\",\n          \"rows\": {{ JSON.stringify($json.rows) }}\n        }\n      ]\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1520,
+        -512
+      ],
+      "id": "0cecb068-d0d1-4eba-9ad4-e04855201ec0",
+      "name": "Send Time Slots",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "sessions",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Merge State').first().json.patient_phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "current_step",
+              "fieldValue": "select_time"
+            },
+            {
+              "fieldId": "last_activity",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "context",
+              "fieldValue": "={{ JSON.stringify({\n  dept_id: $('Merge State').first().json.context.dept_id,\n  dept_name: $('Merge State').first().json.context.dept_name,\n  dept_slug: $('Merge State').first().json.context.dept_slug,\n  doctor_id: $('Merge State').first().json.context.doctor_id,\n  consultation_fee: $('Merge State').first().json.context.consultation_fee,\n  appointment_date: $('Merge State').first().json.context.appointment_date,\n  appointment_time: $('Merge State').first().json.userInput,\n  display_time: $('Merge State').first().json.userInput.replace('time_', '')\n}) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -2416,
+        64
+      ],
+      "id": "861eaa70-859b-45fa-80b8-e66d5e78140f",
+      "name": "Update Session - Time",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const mergeState = $('Merge State').first().json;\nconst userInput = mergeState.userInput || '';\nconst context = mergeState.context || {};\n\nreturn [{\n  json: {\n    patient_phone: mergeState.patient_phone,\n    name: mergeState.name,\n    deptName: context.dept_name || '',\n    appointment_date: context.appointment_date || '',\n    appointment_time: context.appointment_time || '',\n    display_time: context.display_time || context.appointment_time?.replace('time_', '') || '',\n    doctor_id: (context.doctor_id || '').replace('doc_', ''),\n    consultation_fee: context.consultation_fee || 0,\n    payment_method: context.payment_method || 'cash',\n    transaction_id: context.transaction_id || null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1744,
+        64
+      ],
+      "id": "d6fd4ff7-c9c9-4aab-8e07-38581019bbd3",
+      "name": "Build Booking Summary"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Build Booking Summary').first().json.patient_phone }}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"button\",\n    \"header\": { \"type\": \"text\", \"text\": \"🗓 Booking Summary\" },\n    \"body\": {\n      \"text\": \"Please confirm your appointment:\\n\\n👤 *Patient:* {{ $('Build Booking Summary').first().json.name }}\\n🏥 *Department:* {{ $('Build Booking Summary').first().json.deptName }}\\n📅 *Date:* {{ $('Build Booking Summary').first().json.appointment_date }}\\n⏰ *Time:* {{ $('Build Booking Summary').first().json.display_time }}\\n\\nDo you want to confirm this booking?\"\n    },\n    \"footer\": { \"text\": \"ZamaCare Hospital\" },\n    \"action\": {\n      \"buttons\": [\n        { \"type\": \"reply\", \"reply\": { \"id\": \"confirm_booking\", \"title\": \"✅ Confirm\" } },\n        { \"type\": \"reply\", \"reply\": { \"id\": \"cancel_booking\", \"title\": \"❌ Cancel\" } }\n      ]\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1520,
+        64
+      ],
+      "id": "caa17573-0ec4-4952-9df4-d3ca36b14d82",
+      "name": "Send Booking Summary",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "sessions",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Merge State').first().json.patient_phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "current_step",
+              "fieldValue": "confirm_booking"
+            },
+            {
+              "fieldId": "last_activity",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "context",
+              "fieldValue": "={{ JSON.stringify({ dept_id: $('Merge State').first().json.context.dept_id, dept_name: $('Merge State').first().json.context.dept_name, doctor_id: $('Merge State').first().json.context.doctor_id, appointment_date: $('Merge State').first().json.context.appointment_date, appointment_time: $('Build Booking Summary').first().json.selectedTime, display_time: $('Build Booking Summary').first().json.displayTime }) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        64
+      ],
+      "id": "fd7d3282-3ef7-4d0f-80ae-61d540450d81",
+      "name": "Update Session - Confirm",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const mergeState = $('Merge State').first().json;\nconst context = typeof mergeState.context === 'string' \n  ? JSON.parse(mergeState.context) \n  : mergeState.context || {};\n\nreturn [{ json: {\n  patient_phone: mergeState.patient_phone,\n  name: mergeState.name,\n  doctor_id: (context.doctor_id || '').replace('doc_', '') || null,\n  dept_name: context.dept_name || '',\n  appointment_date: context.appointment_date || null,\n  appointment_time: context.appointment_time || '',\n  display_time: context.display_time || context.appointment_time?.replace('time_', '') || '',\n  transaction_id: context.transaction_id || null,\n  consultation_fee: context.consultation_fee || 0,\n  session_id: mergeState.session_id || null\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2416,
+        448
+      ],
+      "id": "7635ec26-e11d-4c94-ac5b-8a3501f8c0e3",
+      "name": "Extract Booking Data"
+    },
+    {
+      "parameters": {
+        "tableId": "appointments",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "patient_phone",
+              "fieldValue": "={{ $json.patient_phone }}"
+            },
+            {
+              "fieldId": "patient_name",
+              "fieldValue": "={{ $json.name }}"
+            },
+            {
+              "fieldId": "doctor_id",
+              "fieldValue": "={{ $json.doctor_id }}"
+            },
+            {
+              "fieldId": "appointment_time",
+              "fieldValue": "={{ $json.appointment_time }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "pending"
+            },
+            {
+              "fieldId": "channel",
+              "fieldValue": "whatsapp"
+            },
+            {
+              "fieldId": "created_at",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "booking_source",
+              "fieldValue": "whatsapp"
+            },
+            {
+              "fieldId": "appointment_date",
+              "fieldValue": "={{ $json.appointment_date }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -2192,
+        448
+      ],
+      "id": "8e6c0b51-14bc-4fd4-95f2-f4dd85b49a3a",
+      "name": "Create Appointment",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "sessions",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Extract Booking Data').first().json.patient_phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "current_step",
+              "fieldValue": "main_menu"
+            },
+            {
+              "fieldId": "is_active",
+              "fieldValue": "=false"
+            },
+            {
+              "fieldId": "last_activity",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "appointment_id",
+              "fieldValue": "={{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        448
+      ],
+      "id": "5f58ea62-a0c4-44c4-8535-824702c86dff",
+      "name": "Close Session",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Extract Booking Data').first().json.patient_phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"✅ *Appointment Confirmed!*\\n━━━━━━━━━━━━━━━\\n👤 *Patient:* {{ $('Extract Booking Data').first().json.name }}\\n🏥 *Department:* {{ $('Extract Booking Data').first().json.dept_name }}\\n📅 *Date:* {{ $('Extract Booking Data').first().json.appointment_date }}\\n🕐 *Time:* {{ $('Extract Booking Data').first().json.display_time }}\\n━━━━━━━━━━━━━━━\\n🏥 Thank you for choosing *ZamaCare Hospital*!\\n📞 For help: *+92315-4396976*\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1072,
+        448
+      ],
+      "id": "6866dc5c-a94d-49b4-8c3f-7de4d7988d00",
+      "name": "Send Confirmation",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "appointments",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $json.patient_phone }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -2416,
+        1024
+      ],
+      "id": "0cd62236-0997-4ac8-8379-9ef917122a9e",
+      "name": "Get Appointments",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const appts = $input.all();\nconst state = $('Merge State').first().json;\n\nif (appts.length === 0 || !appts[0].json.id) {\n  return [{\n    json: {\n      patient_phone: state.patient_phone,\n      name: state.name,\n      message: \"📭 *No Appointments Found*\\n\\nYou have no appointments yet.\\n\\n_Type *hi* to go back to the main menu and book an appointment_ 📅\"\n    }\n  }];\n}\n\nlet msg = '🏥 *ZamaCare Hospital*\\n';\nmsg += '━━━━━━━━━━━━━━━━━━━━\\n';\nmsg += '📋 *Your Appointments*\\n';\nmsg += '━━━━━━━━━━━━━━━━━━━━\\n\\n';\n\nappts.forEach((a, i) => {\n  const ap = a.json;\n  const statusEmoji = ap.status === 'confirmed' ? '✅' : ap.status === 'pending' ? '⏳' : ap.status === 'cancelled' ? '❌' : '📋';\n  const timeDisplay = ap.appointment_time ? ap.appointment_time.replace('time_', '') : 'N/A';\n  \n  msg += i + 1 + '. ' + statusEmoji + ' *Appointment ' + (i + 1) + '*\\n';\n  msg += '   📅 *Date:* ' + (ap.appointment_date || 'N/A') + '\\n';\n  msg += '   ⏰ *Time:* ' + timeDisplay + '\\n';\n  msg += '   🏷️ *Status:* ' + (ap.status || 'pending') + '\\n';\n  msg += '   🔖 *ID:* #' + ap.id.substring(0, 8) + '...\\n';\n  msg += '\\n';\n});\n\nmsg += '━━━━━━━━━━━━━━━━━━━━\\n';\nmsg += '_Type *hi* to return to main menu_';\n\nreturn [{\n  json: {\n    patient_phone: state.patient_phone,\n    name: state.name,\n    message: msg\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2192,
+        1024
+      ],
+      "id": "3f692edf-a6b4-4396-97fd-dbb4c5dba9e2",
+      "name": "Build Appointments List"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  \"messaging_product\": \"whatsapp\",\n  \"to\": $json.patient_phone,\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": $json.message\n  }\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1968,
+        1024
+      ],
+      "id": "c8771940-2ecc-497f-8472-52856fa63ca4",
+      "name": "Send Appointments",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization ",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Merge State').first().json.patient_phone }}\",\n  \"type\": \"location\",\n  \"location\": {\n    \"latitude\": \"27.5329\",\n    \"longitude\": \"68.7673\",\n    \"name\": \"ZamaCare Hospital\",\n    \"address\": \"Main Street, Khairpur, Sindh\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2416,
+        1216
+      ],
+      "id": "431df127-43a5-4914-8d21-b8bd50f270ba",
+      "name": "Send Location",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Merge State').first().json.patient_phone }}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"list\",\n    \"header\": { \"type\": \"text\", \"text\": \"💳 Select Payment Method\" },\n    \"body\": {\n      \"text\": \"Please select your preferred payment method:\\n\\n━━━━━━━━━━━━━━━\\n💵 *Option 1 - Cash*\\nPay directly at reception\\n\\n🏦 *Option 2 - Bank Transfer*\\nBank: Meezan Bank\\nIBAN: PK04MEZN0001520100123456\\nAccount: ZamaCare Hospital\\n━━━━━━━━━━━━━━━\"\n    },\n    \"footer\": { \"text\": \"👇 Choose your payment method\" },\n    \"action\": {\n      \"button\": \"Choose Payment\",\n      \"sections\": [{\n        \"title\": \"Payment Methods\",\n        \"rows\": [\n          { \"id\": \"payment_cash\", \"title\": \"💵 Cash\", \"description\": \"Pay directly at reception\" },\n          { \"id\": \"payment_meezan\", \"title\": \"🏦 Meezan Bank\", \"description\": \"IBAN: PK40MEZN0001520100123456\" }\n        ]\n      }]\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2192,
+        64
+      ],
+      "id": "3bed103b-b86d-4095-8442-b431ee20ebed",
+      "name": "Send Payment Methods",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const depts = $input.all();\nconst state = $('Merge State').first().json;\n\nconst rows = depts.map(d => ({\n  id: String('dept_' + d.json.slug).substring(0, 200),\n  title: String(d.json.name).substring(0, 24),\n  description: String(d.json.description || '').substring(0, 72)\n}));\n\nreturn [{ json: { patient_phone: state.patient_phone, name: state.name, rows } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2192,
+        832
+      ],
+      "id": "5b0a7f7e-1772-4a2b-b85c-8ad9217c0058",
+      "name": "Build Dept List"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Merge State').first().json.patient_phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"💳 Payment Confirmation\\n\\nPlease send your transaction ID to confirm payment.\\n\\nExample: TXN123456789\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2416,
+        -320
+      ],
+      "id": "a2a3722f-4e95-47a5-97ad-46bb174f1197",
+      "name": "Ask Transaction ID",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "sessions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Merge State').first().json.patient_phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "current_step",
+              "fieldValue": "confirm_booking"
+            },
+            {
+              "fieldId": "context",
+              "fieldValue": "={{ JSON.stringify({\n  ...($('Merge State').first().json.context),\n  payment_method: $('Merge State').first().json.context.payment_method || 'online',\n  payment_status: 'pending',\n  transaction_id: $('Merge State').first().json.userInput,\n  amount: $('Merge State').first().json.context.consultation_fee\n}) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -2416,
+        -128
+      ],
+      "id": "a3fc3e41-28e9-464f-ac33-75bf26152af8",
+      "name": "Save Payment",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "payments",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "appointment_id",
+              "fieldValue": "={{ $('Create Appointment').first().json.id }}"
+            },
+            {
+              "fieldId": "payment_method",
+              "fieldValue": "={{ $('Extract Booking Data').first().json.context?.payment_method || 'cash' }}"
+            },
+            {
+              "fieldId": "transaction_id",
+              "fieldValue": "={{ $('Extract Booking Data').first().json.context?.transaction_id || null }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "=pending"
+            },
+            {
+              "fieldId": "paid_at",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "amount",
+              "fieldValue": "={{ $('Create Appointment').first().json.consultation_fee || 0 }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1744,
+        448
+      ],
+      "id": "cfb3df6e-761a-4911-a4d0-bf618a5fcaa4",
+      "name": "Create Payment",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const mergeState = $('Merge State').first().json;\nconst context = mergeState.context || {};\nreturn [{ json: {\n  patient_phone: mergeState.patient_phone,\n  name: mergeState.name,\n  context: {\n    ...context,\n    transaction_id: mergeState.userInput,\n    payment_method: 'meezan_bank',\n    amount: context.consultation_fee\n  }\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2192,
+        256
+      ],
+      "id": "ac71e18f-da17-4710-aa4e-c578afab8a33",
+      "name": "Save Transaction"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "doctor_availability",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "doctor_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Merge State').first().json.userInput.replace('doc_', '') }}"
+            },
+            {
+              "keyName": "is_active",
+              "condition": "eq",
+              "keyValue": "true"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -2416,
+        -704
+      ],
+      "id": "bbb310c7-e536-4b91-bd49-5185e28cf426",
+      "name": "Get Doctor Availability",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "appointments",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "doctor_id",
+              "condition": "eq",
+              "keyValue": "={{ JSON.parse($('Update Session Date').first().json.context).doctor_id }}"
+            },
+            {
+              "keyName": "appointment_date",
+              "condition": "eq",
+              "keyValue": "={{ JSON.parse($('Update Session Date').first().json.context).appointment_date }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "neq",
+              "keyValue": "cancelled"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1968,
+        -512
+      ],
+      "id": "aac24d02-29b2-4b0d-8506-2c430011cf99",
+      "name": "Get Booked Slots",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const mergeState = $('Merge State').first().json;\nconst context = typeof mergeState.context === 'string' \n  ? JSON.parse(mergeState.context) \n  : mergeState.context || {};\n\nconst doctorId = (context.doctor_id || '').replace('doc_', '');\nconst selectedDate = mergeState.userInput.startsWith('date_')\n  ? mergeState.userInput.replace('date_', '')\n  : (context.appointment_date || '');\n\nreturn [{ json: {\n  ...mergeState,\n  clean_doctor_id: doctorId,\n  selected_date: selectedDate,\n  context: context\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2416,
+        -512
+      ],
+      "id": "7a2ade8a-171b-4b05-a1a9-95218d1c9bb6",
+      "name": "Extract Doctor ID"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Merge State').first().json.patient_phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"✅ *Thank You, {{ $('Merge State').first().json.name }}!*\\n\\nYour payment has been received successfully. 🎉\\n\\n💳 *TXN ID:* {{ $('Merge State').first().json.userInput }}\\n\\n_Proceeding to your booking summary..._\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1968,
+        256
+      ],
+      "id": "04527b9d-1794-42aa-af71-d83a90c1be8f",
+      "name": "Payment Confirmation Message",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "sessions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Merge State').first().json.patient_phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "current_step",
+              "fieldValue": "confirm_booking"
+            },
+            {
+              "fieldId": "context",
+              "fieldValue": "={{ JSON.stringify({ \n  ...($('Merge State').first().json.context),\n  payment_method: 'cash',\n  payment_status: 'confirmed'\n}) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -2192,
+        -128
+      ],
+      "id": "76240063-24fd-4ce4-a693-c127059d9a72",
+      "name": "Update Session - Payment",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization ",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Merge State').first().json.patient_phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"💵 *Cash Payment Reminder*\\n\\nDear {{ $('Merge State').first().json.patient_name }},\\n\\nPlease bring your *cash payment* to the reception at the time of your appointment.\\n\\n📅 *Date:* {{ $('Merge State').first().json.context.appointment_date }}\\n🏥 *Department:* {{ $('Merge State').first().json.context.dept_name }}\\n\\nThank you for choosing *ZamaCare Hospital!* 🏥\\nFor help: *+92315-4396976*\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1968,
+        -128
+      ],
+      "id": "4749dd7d-0ea2-4fb4-8e8d-cbb3ddd49760",
+      "name": "Cash Reminder Message",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "sessions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Merge State').first().json.patient_phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "current_step",
+              "fieldValue": "select_date"
+            },
+            {
+              "fieldId": "last_activity",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "context",
+              "fieldValue": "={{ JSON.stringify({\n  dept_id: $('Extract Doctor ID').first().json.context.dept_id,\n  dept_name: $('Extract Doctor ID').first().json.context.dept_name,\n  dept_slug: $('Extract Doctor ID').first().json.context.dept_slug,\n  doctor_id: $('Extract Doctor ID').first().json.context.doctor_id,\n  consultation_fee: $('Extract Doctor ID').first().json.context.consultation_fee,\n  appointment_date: $('Extract Doctor ID').first().json.userInput.replace('date_', ''),\n  appointment_time: '',\n  display_time: ''\n}) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -2192,
+        -512
+      ],
+      "id": "adb12f73-dc21-493c-b087-71d340454f01",
+      "name": "Update Session Date",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Merge State').first().json.patient_phone }}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"button\",\n    \"header\": { \"type\": \"text\", \"text\": \"⏰ Hospital Timings\" },\n    \"body\": {\n      \"text\": \"╔════════════════════╗\\n🏥  *ZamaCare Hospital*\\n╚════════════════════╝\\n\\n⏰ *Working Hours*\\n\\n📅 *Monday – Saturday*\\n🟢 8:00 AM – 10:00 PM\\n\\n📅 *Sunday*\\n🔴 Closed\\n\\n💬 _For emergency, call us anytime!_\\n📞 +92315-4396976\"\n    },\n    \"footer\": { \"text\": \"🌟 ZamaCare – Your Health, Our Priority\" },\n    \"action\": {\n      \"buttons\": [\n        { \"type\": \"reply\", \"reply\": { \"id\": \"main_menu\", \"title\": \"🏠 Main Menu\" }}\n      ]\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2416,
+        1408
+      ],
+      "id": "5dccfa2c-0d7b-4347-9287-3850fe9f3020",
+      "name": "Send Hospital Timing",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "sessions",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Merge State').first().json.patient_phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "current_step",
+              "fieldValue": "select_date"
+            },
+            {
+              "fieldId": "context",
+              "fieldValue": "={{ JSON.stringify({ \n  dept_id: $('Extract Doctor & Build Dates').first().json.context.dept_id, \n  dept_name: $('Extract Doctor & Build Dates').first().json.context.dept_name, \n  dept_slug: $('Extract Doctor & Build Dates').first().json.context.dept_slug, \n  doctor_id: $('Extract Doctor & Build Dates').first().json.context.doctor_id, \n  consultation_fee: $('Extract Doctor & Build Dates').first().json.context.consultation_fee \n}) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1744,
+        -704
+      ],
+      "id": "d02626da-53de-4728-8b74-7838dd02835c",
+      "name": "Update Session - Doctor2",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "workflow_logs",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $('Merge State').first().json.patient_phone }}"
+            },
+            {
+              "fieldId": "event",
+              "fieldValue": "appointment_created"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "success"
+            },
+            {
+              "fieldId": "details",
+              "fieldValue": "={{ JSON.stringify($('Create Appointment').first().json) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1968,
+        448
+      ],
+      "id": "90cbb1c2-44be-4c2b-84e8-6eaff93a8d8e",
+      "name": "Log Appointment Created",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "workflow_logs",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $('Merge State').first().json.patient_phone }}"
+            },
+            {
+              "fieldId": "event",
+              "fieldValue": "payment_created"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "success"
+            },
+            {
+              "fieldId": "details",
+              "fieldValue": "={{ JSON.stringify($('Create Payment').first().json) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1520,
+        448
+      ],
+      "id": "2e1ff4c6-34d5-424c-a810-92b97a8d471a",
+      "name": "Log Payment Created",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# 📌 Webhook Entry Point\n# Receives: All incoming WhatsApp messages\n\n# Verifies Meta signature\n# Filters status updates\n# Extracts message & phone number",
+        "height": 464,
+        "width": 528,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -4976,
+        -48
+      ],
+      "id": "82c55c08-fb79-49b2-b856-340e826f120f",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "# 📌 Message Processing\n\n# Extracts phone, name, message type\n# Handles button & list replies\n# Skips status updates & empty messages",
+        "height": 416,
+        "width": 464,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -4384,
+        -192
+      ],
+      "id": "4742be02-9d04-4358-8727-15064cb20efb",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "# 📌 Session Management\n\n# Fetches active session from Supabase\n# Merges session state with user input\n# Creates new session if none exists",
+        "height": 432,
+        "width": 592,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3904,
+        -192
+      ],
+      "id": "233c09de-b44c-4731-907e-dbb8f4db287f",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "# 📌 Session Save & Merge\n\n# Updates existing session in Supabase\n# Creates new session if first message\n# Tracks current step & last activity\n# Combines session data for main router",
+        "height": 416,
+        "width": 544,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3296,
+        -224
+      ],
+      "id": "247683e6-5d79-47aa-8551-c8524ff92c5b",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "# 📌 Main Router\n# Routes by current_step\n# Directs to correct node",
+        "height": 304,
+        "width": 310,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2752,
+        -240
+      ],
+      "id": "13391f83-47c4-4ede-9bf1-1a6367876787",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const state = $('Merge State').first().json;\n\nreturn [{\n  json: {\n    patient_phone: state.patient_phone,\n    name: state.name\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2416,
+        1600
+      ],
+      "id": "4228206f-0b40-4930-9549-07400ec2f896",
+      "name": "Extract Cancel ID"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "appointments",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_phone",
+              "condition": "eq",
+              "keyValue": "={{ $json.patient_phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "cancelled"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -2192,
+        1600
+      ],
+      "id": "b9e3ed1c-af36-4ddc-a6c5-b9475461f2b7",
+      "name": "Update Cancel Appointment",
+      "credentials": {
+        "supabaseApi": {
+          "id": "mYNZSZisp9xpYL9j",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/931706840034162/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAcs0kXAJfgBQZBM2j3ed9zLd5dCxGAGHwkf5yLiy7M0hqTkS5eHhzVsxUA8w53Y40gsierlT22y8d3gSTlO3QJwKyWl7PkMLIZCsxW8ab2fIzEJ39TZAZAO4zZCAMhRzj2Xon3vUbiwai1BZCLXRtWKWtHjueSeFyD7HnlsgJGtexIB9JWiehJpdoYYG2AqzZB8QZDZD"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $('Extract Cancel ID').first().json.patient_phone }}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"button\",\n    \"header\": {\n      \"type\": \"text\",\n      \"text\": \"❌ Appointment Cancelled\"\n    },\n    \"body\": {\n      \"text\": \"━━━━━━━━━━━━━━━━━━━━\\n✅ *Cancellation Confirmed!*\\n━━━━━━━━━━━━━━━━━━━━\\n\\n👤 *Patient:* {{ $('Extract Cancel ID').first().json.name }}\\n🔖 *Appointment ID:* #{{ $('Extract Cancel ID').first().json.appointment_id }}\\n📌 *Status:* Cancelled\\n\\n━━━━━━━━━━━━━━━━━━━━\\n_We hope to see you again soon!_ 💙\"\n    },\n    \"footer\": {\n      \"text\": \"ZamaCare Hospital — Caring for You Always\"\n    },\n    \"action\": {\n      \"buttons\": [\n        { \"type\": \"reply\", \"reply\": { \"id\": \"book_appointment\", \"title\": \"📅 Book New\" }},\n        { \"type\": \"reply\", \"reply\": { \"id\": \"main_menu\", \"title\": \"🏠 Main Menu\" }}\n      ]\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1968,
+        1600
+      ],
+      "id": "8b57c96f-ab32-4755-afdd-2520551452a1",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Whatsapp Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Message": {
+      "main": [
+        [
+          {
+            "node": "Skip Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Check": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Get Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Session": {
+      "main": [
+        [
+          {
+            "node": "Merge State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge State": {
+      "main": [
+        [
+          {
+            "node": "Session Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session Exists?": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a row": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Route by Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Step": {
+      "main": [
+        [
+          {
+            "node": "Send Main Menu",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Departments",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Dept",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Doctor Availability",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Doctor ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Session - Time",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Booking Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Appointments",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Location",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save Payment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask Transaction ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Hospital Timing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Cancel ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Departments": {
+      "main": [
+        [
+          {
+            "node": "Build Dept List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Dept List": {
+      "main": [
+        [
+          {
+            "node": "Update Session - Dept",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Dept": {
+      "main": [
+        [
+          {
+            "node": "Get Dept ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Dept ID": {
+      "main": [
+        [
+          {
+            "node": "Get Doctors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Doctors": {
+      "main": [
+        [
+          {
+            "node": "Build Doctor List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Doctor List": {
+      "main": [
+        [
+          {
+            "node": "Send Doctor List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Doctor List": {
+      "main": [
+        [
+          {
+            "node": "Update Session - Doctor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Doctor & Build Dates": {
+      "main": [
+        [
+          {
+            "node": "Send Date List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Date List": {
+      "main": [
+        [
+          {
+            "node": "Update Session - Doctor2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Time Slots": {
+      "main": [
+        [
+          {
+            "node": "Send Time Slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Time Slots": {
+      "main": [
+        []
+      ]
+    },
+    "Build Booking Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Booking Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Booking Summary": {
+      "main": [
+        [
+          {
+            "node": "Update Session - Confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Booking Data": {
+      "main": [
+        [
+          {
+            "node": "Create Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Appointment": {
+      "main": [
+        [
+          {
+            "node": "Log Appointment Created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close Session": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Appointments": {
+      "main": [
+        [
+          {
+            "node": "Build Appointments List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Appointments List": {
+      "main": [
+        [
+          {
+            "node": "Send Appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Dept List": {
+      "main": [
+        [
+          {
+            "node": "Send Dept List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Session - Time": {
+      "main": [
+        [
+          {
+            "node": "Send Payment Methods",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Payment": {
+      "main": [
+        [
+          {
+            "node": "Update Session - Payment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Payment": {
+      "main": [
+        [
+          {
+            "node": "Log Payment Created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Payment Methods": {
+      "main": [
+        []
+      ]
+    },
+    "Ask Transaction ID": {
+      "main": [
+        []
+      ]
+    },
+    "Save Transaction": {
+      "main": [
+        [
+          {
+            "node": "Payment Confirmation Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Doctor Availability": {
+      "main": [
+        [
+          {
+            "node": "Extract Doctor & Build Dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Booked Slots": {
+      "main": [
+        [
+          {
+            "node": "Build Time Slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Doctor ID": {
+      "main": [
+        [
+          {
+            "node": "Update Session Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Session - Payment": {
+      "main": [
+        [
+          {
+            "node": "Cash Reminder Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cash Reminder Message": {
+      "main": [
+        [
+          {
+            "node": "Build Booking Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Payment Confirmation Message": {
+      "main": [
+        [
+          {
+            "node": "Build Booking Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Session Date": {
+      "main": [
+        [
+          {
+            "node": "Get Booked Slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Appointment Created": {
+      "main": [
+        [
+          {
+            "node": "Create Payment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Payment Created": {
+      "main": [
+        [
+          {
+            "node": "Close Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Cancel ID": {
+      "main": [
+        [
+          {
+            "node": "Update Cancel Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Cancel Appointment": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "ezrz3LiBBRpmaZeM",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "ddd2cc3e-7d72-42c6-a32e-380e995abf7a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "07ad17bb6e42bde2345223a964390e0bb8e9a61f0642569888ee219cce5bcde1"
+  },
+  "id": "1CHmGuEdb5XqwFQw",
+  "tags": []
+}
